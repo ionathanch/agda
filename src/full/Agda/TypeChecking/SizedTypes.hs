@@ -271,7 +271,7 @@ deepSizeView v = do
   let loop v =
         reduce v >>= \case
           Def x []        | x == inf -> return $ DSizeInf
-          Def x [Apply u] | x == suc -> sizeViewSuc_ suc <$> loop (unArg u)
+          Def x [Apply u] | x == suc -> sizeViewSuc_ suc =<< loop (unArg u)
 
           Var i es | Just pv <- ProjectedVar i <$> mapM isProjElim es
                                      -> return $ DSizeVar pv 0
@@ -279,7 +279,7 @@ deepSizeView v = do
           v                          -> return $ DOtherSize v
   loop v
 
-sizeMaxView :: PureTCM m => Term -> m SizeMaxView
+sizeMaxView :: (PureTCM m, MonadTCError m) => Term -> m SizeMaxView
 sizeMaxView v = do
   inf <- getBuiltinDefName builtinSizeInf
   suc <- getBuiltinDefName builtinSizeSuc
@@ -288,7 +288,7 @@ sizeMaxView v = do
         v <- reduce v
         case v of
           Def x []                   | Just x == inf -> return $ singleton $ DSizeInf
-          Def x [Apply u]            | Just x == suc -> maxViewSuc_ (fromJust suc) <$> loop (unArg u)
+          Def x [Apply u]            | Just x == suc -> maxViewSuc_ (fromJust suc) =<< loop (unArg u)
           Def x [Apply u1, Apply u2] | Just x == max -> maxViewMax <$> loop (unArg u1) <*> loop (unArg u2)
           Var i es | Just pv <- ProjectedVar i <$> mapM isProjElim es
                                         -> return $ singleton $ DSizeVar pv 0
@@ -324,7 +324,7 @@ compareSizes cmp u v = verboseBracket "tc.conv.size" 10 "compareSizes" $ do
 -- | Compare two sizes in max view.
 compareMaxViews :: (MonadConversion m) => Comparison -> SizeMaxView -> SizeMaxView -> m ()
 compareMaxViews cmp us vs = case (cmp, us, vs) of
-  (CmpLeq, _, (DSizeInf :| _)) -> return ()
+  -- (CmpLeq, _, (DSizeInf :| _)) -> return ()
   (cmp, u:|[], v:|[]) -> compareSizeViews cmp u v
   (CmpLeq, us, v:|[]) -> Fold.forM_ us $ \ u -> compareSizeViews cmp u v
   (CmpLeq, us, vs)    -> Fold.forM_ us $ \ u -> compareBelowMax u vs
@@ -371,10 +371,10 @@ compareSizeViews cmp s1' s2' = do
       failure = withUnView $ \ u v -> typeError $ UnequalTerms cmp u v AsSizes
       continue cmp = withUnView $ compareAtom cmp AsSizes
   case (cmp, s1, s2) of
-    (CmpLeq, _,            DSizeInf)   -> return ()
+    (CmpLeq, DSizeInf,     _         ) -> return ()
     (CmpEq,  DSizeInf,     DSizeInf)   -> return ()
-    (CmpEq,  DSizeVar{},   DSizeInf)   -> failure
-    (_    ,  DSizeInf,     DSizeVar{}) -> failure
+    (_    ,  DSizeVar{},   DSizeInf)   -> failure
+    (CmpEq,  DSizeInf,     DSizeVar{}) -> failure
     (_    ,  DSizeInf,     _         ) -> continue CmpEq
     (CmpLeq, DSizeVar i n, DSizeVar j m) | i == j -> unless (n <= m) failure
     (CmpLeq, DSizeVar i n, DSizeVar j m) | i /= j -> do

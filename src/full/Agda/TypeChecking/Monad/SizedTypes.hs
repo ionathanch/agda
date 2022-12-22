@@ -239,23 +239,24 @@ data SizeViewComparable a
 --   or @v <= w@ (then @Right@).  If uncomparable, it returns @NotComparable@.
 sizeViewComparable :: DeepSizeView -> DeepSizeView -> SizeViewComparable ()
 sizeViewComparable v w = case (v,w) of
-  (DSizeInf, _) -> YesAbove w ()
-  (_, DSizeInf) -> YesBelow w ()
+  (DSizeInf, _) -> YesBelow w ()
+  (_, DSizeInf) -> YesAbove w ()
   (DSizeVar x n, DSizeVar y m) | x == y -> if n >= m then YesAbove w () else YesBelow w ()
   _ -> NotComparable
 
-sizeViewSuc_ :: QName -> DeepSizeView -> DeepSizeView
+sizeViewSuc_ :: (HasBuiltins m, MonadError TCErr m, MonadTCEnv m, ReadTCState m)
+             => QName -> DeepSizeView -> m DeepSizeView
 sizeViewSuc_ suc = \case
-  DSizeInf         -> DSizeInf
-  DSizeVar i n     -> DSizeVar i (n + 1)
-  DSizeMeta x vs n -> DSizeMeta x vs (n + 1)
-  DOtherSize u     -> DOtherSize $ sizeSuc_ suc u
+  DSizeInf         -> DOtherSize . sizeSuc_ suc <$> primSizeInf
+  DSizeVar i n     -> return $ DSizeVar i (n + 1)
+  DSizeMeta x vs n -> return $ DSizeMeta x vs (n + 1)
+  DOtherSize u     -> return $ DOtherSize $ sizeSuc_ suc u
 
 -- | @sizeViewPred k v@ decrements @v@ by @k@ (must be possible!).
 sizeViewPred :: Nat -> DeepSizeView -> DeepSizeView
 sizeViewPred 0 = id
 sizeViewPred k = \case
-  DSizeInf -> DSizeInf
+  -- DSizeInf -> DSizeInf
   DSizeVar  i    n | n >= k -> DSizeVar  i    (n - k)
   DSizeMeta x vs n | n >= k -> DSizeMeta x vs (n - k)
   _ -> __IMPOSSIBLE__
@@ -263,7 +264,7 @@ sizeViewPred k = \case
 -- | @sizeViewOffset v@ returns the number of successors or Nothing when infty.
 sizeViewOffset :: DeepSizeView -> Maybe Offset
 sizeViewOffset = \case
-  DSizeInf         -> Nothing
+  DSizeInf         -> Just 0
   DSizeVar i n     -> Just n
   DSizeMeta x vs n -> Just n
   DOtherSize u     -> Just 0
@@ -300,15 +301,15 @@ type SizeMaxView' = [DeepSizeView]
 
 maxViewMax :: SizeMaxView -> SizeMaxView -> SizeMaxView
 maxViewMax v w = case (v,w) of
-  (DSizeInf :| _, _) -> singleton DSizeInf
-  (_, DSizeInf :| _) -> singleton DSizeInf
+  -- (DSizeInf :| _, _) -> singleton DSizeInf
+  -- (_, DSizeInf :| _) -> singleton DSizeInf
   _                 -> Fold.foldr maxViewCons w v
 
 -- | @maxViewCons v ws = max v ws@.  It only adds @v@ to @ws@ if it is not
 --   subsumed by an element of @ws@.
 maxViewCons :: DeepSizeView -> SizeMaxView -> SizeMaxView
-maxViewCons _ (DSizeInf :| _) = singleton DSizeInf
-maxViewCons DSizeInf _        = singleton DSizeInf
+-- maxViewCons _ (DSizeInf :| _) = singleton DSizeInf
+-- maxViewCons DSizeInf _        = singleton DSizeInf
 maxViewCons v ws = case sizeViewComparableWithMax v ws of
   NotComparable  -> List1.cons v ws
   YesAbove _ ws' -> v :| ws'
@@ -324,8 +325,9 @@ sizeViewComparableWithMax v (w :| ws) =
     (ws    , r)             -> fmap (const ws) r
 
 
-maxViewSuc_ :: QName -> SizeMaxView -> SizeMaxView
-maxViewSuc_ suc = fmap (sizeViewSuc_ suc)
+maxViewSuc_ :: (HasBuiltins m, MonadError TCErr m, MonadTCEnv m, ReadTCState m)
+            => QName -> SizeMaxView -> m SizeMaxView
+maxViewSuc_ suc = mapM (sizeViewSuc_ suc)
 
 unMaxView :: (HasBuiltins m, MonadError TCErr m, MonadTCEnv m, ReadTCState m)
           => SizeMaxView -> m Term

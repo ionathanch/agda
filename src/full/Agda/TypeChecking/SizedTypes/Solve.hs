@@ -114,6 +114,9 @@ data DefaultToInfty
 
 solveSizeConstraints :: DefaultToInfty -> TCM ()
 solveSizeConstraints flag =  do
+  -- 0. Never default to infinity.
+
+  let flag = DontDefaultToInfty
 
   -- 1. Take out the size constraints normalised.
 
@@ -502,10 +505,11 @@ solveCluster flag ccs = do
     let SizeMeta _ xs = fromMaybe __IMPOSSIBLE__ $
           List.find ((m==) . sizeMetaId) metas
     -- Check that solution is well-scoped
-    let ys = rigidIndex <$> Set.toList (rigids a)
-        ok = all (`elem` xs) ys -- TODO: more efficient
+    let ys = Set.map rigidIndex $ rigids a
+        ok = Set.isSubsetOf ys (fromList xs)
     -- unless ok $ err "ill-scoped solution for size meta variable"
-    u <- if ok then return u else primSizeInf
+    u <- if ok then return u else typeError . GenericDocError =<<
+      vcat ["ill-scoped solution for size meta variable"]
     t <- getMetaType m
     reportSDoc "tc.size.solve" 20 $ unsafeModifyContext (const gamma) $ do
       let args = map (Apply . defaultArg . var) xs

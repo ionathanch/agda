@@ -1195,7 +1195,11 @@ coerceSize leqType v t1 t2 = verboseBracket "tc.conv.size.coerce" 45 "coerceSize
           BoundedLt v2 -> do
             sv2 <- sizeView v2
             case sv2 of
-              SizeInf     -> done
+              SizeInf -> do
+                -- See below
+                vinc <- sizeSuc 1 v
+                compareSizes CmpLeq vinc v2
+                done
               OtherSize{} -> do
                 -- Andreas, 2014-06-16:
                 -- Issue 1203: For now, just treat v < v2 as suc v <= v2

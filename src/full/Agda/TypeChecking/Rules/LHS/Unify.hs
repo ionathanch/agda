@@ -479,8 +479,8 @@ simplifySizesStrategy k s = do
       sv <- sizeView v
       case (su, sv) of
         (SizeSuc u, SizeSuc v) -> return $ StripSizeSuc k u v
-        (SizeSuc u, SizeInf  ) -> return $ StripSizeSuc k u v
-        (SizeInf  , SizeSuc v) -> return $ StripSizeSuc k u v
+        -- (SizeSuc u, SizeInf  ) -> return $ StripSizeSuc k u v
+        -- (SizeInf  , SizeSuc v) -> return $ StripSizeSuc k u v
         _ -> mzero
     _ -> mzero
 
